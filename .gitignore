@@ -1,0 +1,45 @@
+# Django
+*.pyc
+__pycache__/
+db.sqlite3
+.env
+*.log
+logs/
+
+# Virtual Environment
+venv/
+myenv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Static files
+staticfiles/
+media/
+
+# Database
+*.db
+*.sqlite3
+
+# Celery
+celerybeat-schedule
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
