@@ -9,6 +9,7 @@ Offer System: Lenders can submit offers on available loans
 Fund Reservation: Secure fund reservation during offer process
 
 Payment Scheduling: Automated monthly payment scheduling
+<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/5b9f4b4f-62ac-4f38-9e8e-bfdbd0a41301" />
 
 Balance Management: User profiles with available and reserved balances
 
