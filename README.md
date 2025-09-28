@@ -1,287 +1,350 @@
-Lenme Lending Platform - Django REST API
-A peer-to-peer lending platform built with Django REST Framework that facilitates loan applications, offers, funding, and repayments.
+Lenme — Lending Platform (Django REST)
 
-🚀 Features
-Loan Management: Create, view, and manage loan requests
+A small Django REST project implementing a peer-to-peer lending flow:
+borrower creates a loan request → lenders make offers (reserve funds) → borrower accepts an offer → lender funds the loan → scheduled monthly payments → borrower pays monthly until the loan is COMPLETED.
 
-Offer System: Lenders can submit offers on available loans
+This README documents how to configure, run, test, and use the APIs included in your codebase.
 
-Fund Reservation: Secure fund reservation during offer process
+Table of contents
 
-Payment Scheduling: Automated monthly payment scheduling
-<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/5b9f4b4f-62ac-4f38-9e8e-bfdbd0a41301" />
+Features / Flow
 
-Balance Management: User profiles with available and reserved balances
+Models (short summary)
 
-Transaction Tracking: Complete audit trail for all financial transactions
+API endpoints
 
-Comprehensive Testing: Full test coverage for all endpoints
+Environment & configuration
 
-🏗️ Project Structure
-Models
-Profile: User financial profile with balance management
+Run locally (dev)
 
-Loan: Loan requests with status tracking
+Run tests
 
-Offer: Lender offers with fund reservation
+Example usage (curl)
 
-Payment: Scheduled monthly payments
+Notes & implementation details
 
-Transaction: Financial transaction records
+Suggested improvements / next steps
 
-Key Endpoints
-Loan Management
-POST /api/loans/ - Create a new loan request
+CI (GitHub Actions) example
 
-GET /api/loans/available/ - List loans available for funding
+Features / Flow
 
-Offer System
-POST /api/loans/{id}/submit-offer/ - Submit an offer on a loan
+Borrower submits a loan request (amount, term_months, optional interest_rate).
 
-POST /api/loans/{id}/accept-offer/ - Accept a lender's offer
+Lenders list available loans (loans without a lender and in OFFERED state) and submit offers.
 
-POST /api/loans/{id}/reject-offer/{offer_id}/ - Reject an offer
+Offers reserve the lender’s funds (uses Profile.reserve_funds).
 
-Funding & Payments
-POST /api/loans/{id}/fund/ - Fund an accepted loan
+Borrower can accept the best offer (lowest interest rate).
 
-POST /api/loans/{id}/payments/{payment_id}/ - Make a monthly payment
+Accepting triggers fund transfer logic (profiles updated, other offers rejected and reserved funds released).
 
-🛠️ Installation & Setup
-Prerequisites
-Python 3.8+
+Lender can fund an accepted loan (or funding may already have moved balances during acceptance depending on your flow).
 
-Django 4.0+
+Funding sets loan.status = FUNDED and creates payment schedule (monthly payments).
 
-Django REST Framework
+Borrower pays scheduled payments. When all payments marked paid, loan.status should be set to COMPLETED.
 
-PostgreSQL (recommended) or SQLite
+This repository already includes basic models, serializers, and views for these actions.
 
-pytest & pytest-django for testing
+Models (short summary)
 
-Quick Start
-Clone and setup environment
+Profile
 
-bash
-git clone <repository-url>
-cd lending-platform
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-Install dependencies
+user (OneToOne -> User)
 
-bash
-pip install django djangorestframework psycopg2-binary pytest pytest-django
-Database setup
+balance (Decimal)
 
-bash
-python manage.py makemigrations
-python manage.py migrate
-Create superuser
+reserved_balance (Decimal)
 
-bash
-python manage.py createsuperuser
-Run development server
+Methods: available_balance(), has_sufficient_funds(amount), reserve_funds(amount), release_funds(amount), transfer_funds(amount, to_profile)
 
-bash
-python manage.py runserver
-🧪 Testing
-Running Tests
-bash
-# Run all tests
+Loan
+
+borrower (FK -> User)
+
+lender (FK -> User, nullable)
+
+amount, term_months, interest_rate
+
+lenme_fee (fee paid by lender)
+
+status (DRAFT, OPEN, OFFERED, ACCEPTED, FUNDED, COMPLETED)
+
+created_at, funded_at
+
+Helper methods: total_loan_amount(), monthly_payment_amount()
+
+Offer
+
+loan (FK)
+
+lender (FK)
+
+interest_rate, reserved_amount, status (OPEN, ACCEPTED, REJECTED, EXPIRED, PENDING)
+
+created_at
+
+Payment
+
+loan (FK)
+
+due_date, amount, paid (bool), paid_at
+
+Transaction
+
+from_user, to_user, amount, note, created_at
+
+API endpoints
+
+Note: replace <BASE_URL> with your local server (e.g. http://localhost:8000)
+
+POST /api/loans/ — Create loan (authenticated borrower)
+Serializer: CreateLoanSerializer
+Required body: { "amount": "5000.00", "term_months": 6, "interest_rate": "15.00" }
+Default status: DRAFT (your view uses CreateAPIView with IsAuthenticated)
+
+GET /api/loans/available/ — Available loans for lenders (list loans with lender IS NULL and status='OFFERED')
+
+View: AvailableLoansView (ListAPIView)
+
+POST /api/loans/{loan_id}/offers/ — Submit offer (authenticated lender)
+
+Reserves lender funds (Profile.reserve_funds(total_needed)) and creates Offer with reserved_amount.
+
+Example payload in your current SubmitOfferView uses fixed rate of 15.00 and status 'PENDING'.
+
+GET /api/loans/{loan_id}/offers/ — List offers for a loan (excludes REJECTED).
+
+POST /api/loans/{loan_id}/accept/ — Accept best offer (borrower only)
+
+Accepts the best pending offer, transfers funds, sets loan ACCEPTED, rejects other offers and releases their reserved funds.
+
+POST /api/loans/{loan_id}/reject/{offer_id}/ — Reject offer (borrower only)
+
+Releases reserved funds and sets offer REJECTED. If no pending offers remain, loan returns to OPEN.
+
+POST /api/loans/{loan_id}/fund/ — Fund loan (lender only; used if not already fully transferred during accept flow)
+
+Transfers funds, sets FUNDED, creates payment schedule (Payment objects).
+
+POST /api/loans/{loan_id}/payments/{payment_id}/pay/ — Make payment (borrower only)
+
+Validates borrower balance, transfers to lender, marks Payment.paid = True, creates a Transaction.
+
+Environment & configuration
+
+Create a .env (or use environment variables):
+
+DEBUG=True
+SECRET_KEY=replace-this-with-a-secure-secret
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+DATABASE_URL=postgres://user:password@localhost:5432/lenme_db
+# or for SQLite:
+# DATABASE_URL=sqlite:///db.sqlite3
+
+
+Example settings.py snippet (using dj-database-url):
+
+import dj_database_url
+DATABASES = {
+    'default': dj_database_url.parse(os.getenv('DATABASE_URL'))
+}
+
+
+Dependencies (example):
+
+Django
+
+djangorestframework
+
 pytest
 
-# Run with verbose output
-pytest -v
+pytest-django
 
-# Run specific test class
-pytest lending/tests.py::TestLoanCreateView -v
+dj-database-url (optional)
 
-# Run with coverage report
-pytest --cov=lending
-Test Configuration
-Create pytest.ini in your project root:
+psycopg2-binary (if using PostgreSQL)
 
-ini
-[pytest]
-DJANGO_SETTINGS_MODULE = your_project.settings
-python_files = tests.py test_*.py *_tests.py
-addopts = --reuse-db
-Test Structure
-Your test suite includes:
+Add to requirements.txt:
 
-Loan Creation Tests (TestLoanCreateView)
-✅ Authenticated loan creation
+Django>=4.2
+djangorestframework
+pytest
+pytest-django
+dj-database-url
+psycopg2-binary
 
-✅ Validation for negative amounts
+Run locally (dev)
 
-✅ Unauthenticated access prevention
+Create & activate virtualenv:
 
-✅ Interest rate validation
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 
-✅ Loan term validation
 
-Test Fixtures
-python
-@pytest.fixture
-def api_client():
-    return APIClient()
+Configure .env (database, secret key).
 
-@pytest.fixture
-def users():
-    borrower = User.objects.create_user(username='borrower', password='testpass123')
-    lender = User.objects.create_user(username='lender', password='testpass123')
-    return {'borrower': borrower, 'lender': lender}
-Example Test Scenarios
-python
-# Test successful loan creation
-def test_create_loan_authenticated(self, api_client, users):
-    api_client.force_authenticate(user=users['borrower'])
-    response = api_client.post(reverse('create-loan'), {
-        'amount': '1500.00',
-        'term_months': 6,
-        'interest_rate': '7.50'
-    })
-    assert response.status_code == status.HTTP_201_CREATED
-    assert Loan.objects.count() == 1
+Run migrations:
 
-# Test validation errors
-def test_create_loan_negative_amount(self, api_client, users):
-    api_client.force_authenticate(user=users['borrower'])
-    response = api_client.post(reverse('create-loan'), {
-        'amount': '-100.00',  # Should fail
-        'term_months': 6,
-        'interest_rate': '7.50'
-    })
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-Adding More Tests
-Extend your test suite with these additional test classes:
+python manage.py migrate
 
-python
-class TestOfferFlow:
-    def test_submit_offer_sufficient_funds(self, api_client, users):
-        """Test submitting an offer with sufficient funds"""
-        pass
-    
-    def test_submit_offer_insufficient_funds(self, api_client, users):
-        """Test submitting an offer with insufficient funds"""
-        pass
-    
-    def test_accept_offer_flow(self, api_client, users):
-        """Test complete offer acceptance flow"""
-        pass
 
-class TestPaymentFlow:
-    def test_make_payment_success(self, api_client, users):
-        """Test successful payment processing"""
-        pass
-    
-    def test_make_payment_insufficient_funds(self, api_client, users):
-        """Test payment with insufficient borrower funds"""
-        pass
-📋 API Flow
-1. Loan Application Flow
-text
-Borrower POST /api/loans/
-→ Creates loan with status: DRAFT
-→ Borrower updates loan status to OPEN
-→ Loan appears in available loans list
-2. Offer & Funding Flow
-text
-Lender GET /api/loans/available/
-→ Lender POST /api/loans/{id}/submit-offer/
-→ Funds reserved in lender's profile
-→ Borrower POST /api/loans/{id}/accept-offer/
-→ Funds transferred, payment schedule created
-→ Lender POST /api/loans/{id}/fund/
-→ Loan status: FUNDED
-3. Repayment Flow
-text
-Borrower POST /api/loans/{id}/payments/{payment_id}/
-→ Monthly payment processed
-→ All payments completed → Loan status: COMPLETED
-🔧 Configuration
-Database (settings.py)
-python
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'lenme_db',
-        'USER': 'your_username',
-        'PASSWORD': 'your_password',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
-Test Database
-python
-# For testing, you can use SQLite
-import sys
-if 'test' in sys.argv:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
-    }
-📊 Example Usage
-Create a Loan
-bash
+Create superuser (optional):
+
+python manage.py createsuperuser
+
+
+Run development server:
+
+python manage.py runserver
+
+Run tests
+
+Tests use pytest and pytest-django. Example command:
+
+pytest -q
+
+
+If using a database URL that points to Postgres, ensure the DB exists and credentials are correct. Otherwise use the default SQLite for tests.
+
+Example test hints:
+
+Use fixtures to create User and Profile instances if Profile is required.
+
+Mark DB-using tests with @pytest.mark.django_db.
+
+Example usage (curl)
+
+Create loan (borrower):
+
 curl -X POST http://localhost:8000/api/loans/ \
+  -H "Authorization: Token <BORROWER_TOKEN>" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Token <your-token>" \
-  -d '{
-    "amount": "5000.00",
-    "term_months": 6,
-    "interest_rate": "15.00"
-  }'
-Submit an Offer
-bash
-curl -X POST http://localhost:8000/api/loans/1/submit-offer/ \
-  -H "Authorization: Token <lender-token>"
-🔄 Status Transitions
-text
-DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED
-💰 Financial Calculations
-Total Loan Amount: Loan Amount + Lenme Fee ($3.75)
+  -d '{"amount":"5000.00","term_months":6,"interest_rate":"15.00"}'
 
-Monthly Payment: Calculated using standard amortization formula
 
-Available Balance: Total Balance - Reserved Balance
+Lender submits offer (reserves funds):
 
-🚨 Important Notes
-Funds are reserved when offers are submitted
+curl -X POST http://localhost:8000/api/loans/1/offers/ \
+  -H "Authorization: Token <LENDER_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"interest_rate":"15.00"}'
 
-Only the borrower can accept/reject offers
 
-Lenders must have sufficient available balance
+Borrower accepts best offer:
 
-Payments are scheduled automatically upon funding
+curl -X POST http://localhost:8000/api/loans/1/accept/ \
+  -H "Authorization: Token <BORROWER_TOKEN>"
 
-All financial operations are atomic and transactional
 
-📈 Optional Features
-Caching: Available loans cache with automatic invalidation
+Lender funds loan (if required by flow):
 
-Celery Tasks: Hourly payment processing and reminders
+curl -X POST http://localhost:8000/api/loans/1/fund/ \
+  -H "Authorization: Token <LENDER_TOKEN>"
 
-Swagger Documentation: Auto-generated API documentation
 
-🆘 Troubleshooting
-Common Issues:
+Borrower pays monthly payment:
 
-Insufficient funds: Check lender's available balance
+curl -X POST http://localhost:8000/api/loans/1/payments/5/pay/ \
+  -H "Authorization: Token <BORROWER_TOKEN>"
 
-Invalid status transitions: Verify current loan status
+Notes & implementation details
 
-Payment failures: Ensure borrower has sufficient balance
+Profile creation: Ensure a Profile is created for each User (via a post_save signal on User) or create it explicitly in fixtures. Many view flows expect Profile to exist.
 
-Test database issues: Use pytest --create-db to recreate test database
+Monetary math: Use decimal.Decimal throughout; avoid float arithmetic.
 
-Test-Specific Issues:
+Date arithmetic: Current code creates payment schedule by adding timedelta(days=30 * n) — this is an approximation; consider using dateutil.relativedelta to add months correctly.
 
-Database isolation: Each test runs in transaction
+Atomicity: Key financial actions use transaction.atomic() — keep that to avoid partial updates.
 
-Authentication: Use force_authenticate for testing
+Reserved funds: Offer.reserved_amount and Profile.reserved_balance are used to prevent double-funding; ensure all branches (accept/reject/timeout) release reserved funds.
 
-Fixture data: Set up test data in fixtures
+Edge cases:
 
-For additional support, check the Django REST Framework documentation or create an issue in the repository.
+When accepting an offer, verify the lender still has reserved balance.
 
+Consider race conditions if multiple offers accepted/funded nearly simultaneously (database-level locks or optimistic locking).
+
+Validation: Serializers validate amount, term_months, and interest_rate (e.g., no negative amounts, max caps).
+
+Status transitions: Validate permitted transitions (DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED).
+
+Testing: Include tests for:
+
+Borrower loan request (POST /api/loans/).
+
+Lender offer submission and reserved funds logic.
+
+Borrower acceptance and funds transfer.
+
+Loan funding and creation of payment schedule.
+
+Borrower making monthly payments and loan completion.
+
+Suggested improvements / next steps
+
+Add OpenAPI / Swagger docs (e.g., drf-spectacular or drf-yasg) and expose /swagger/ route.
+
+Replace timedelta(days=30*n) with relativedelta(months=+1) from dateutil.
+
+Add Celery + Celery Beat for scheduled tasks (e.g., reminder emails, automatic repayment attempts).
+
+Add email/notifications for events (offer submitted, accepted, payment due).
+
+Add automated CI to run tests on push (example below).
+
+Add stronger concurrency control around fund reservation and transfer (select_for_update on Profile).
+
+CI (GitHub Actions) example
+
+.github/workflows/ci.yml (simple example):
+
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: lenme_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/lenme_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run migrations
+        run: |
+          python manage.py migrate --noinput
+      - name: Run tests
+        run: pytest -q
+
+
+If you’d like, I can:
+
+Generate a markdown README.md file and paste it ready for your repo (I already did above — you can copy it).
+
+Add a post_save signal example to auto-create Profile for new Users.
+
+Create example pytest test(s) demonstrating the 5k/6-month flow (borrower request → lender offer → accept → fund → payments).
