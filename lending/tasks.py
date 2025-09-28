@@ -36,9 +36,9 @@ def process_due_payments():
                 borrower_profile = Profile.objects.get(user=payment.loan.borrower)
                 lender_profile = Profile.objects.get(user=payment.loan.lender)
                 
-                # Check if borrower has sufficient balance
+            
                 if borrower_profile.balance >= payment.amount:
-                    # Process payment automatically
+                
                     borrower_profile.balance -= payment.amount
                     borrower_profile.save()
                     
@@ -49,7 +49,7 @@ def process_due_payments():
                     payment.paid_at = timezone.now()
                     payment.save()
                     
-                    # Record transaction
+                    
                     Transaction.objects.create(
                         from_user=payment.loan.borrower,
                         to_user=payment.loan.lender,
@@ -60,7 +60,7 @@ def process_due_payments():
                     logger.info(f"Successfully processed payment {payment.id} for loan {payment.loan.id}")
                     successful_count += 1
                     
-                    # Send payment confirmation
+                 
                     send_payment_reminder(payment.loan.borrower.email, payment, automatic=True)
                     
                 else:

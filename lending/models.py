@@ -5,14 +5,45 @@ from decimal import Decimal
 
 User = settings.AUTH_USER_MODEL
 
+# In lending/models.py - Let's check your current Profile model
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    balance = models.DecimalField(
-        max_digits=12, decimal_places=2, default=Decimal('0.00')
-    )
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    reserved_balance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    def available_balance(self):
+        return self.balance - self.reserved_balance
+
+    def has_sufficient_funds(self, amount):
+        return self.available_balance() >= amount
+
+    def reserve_funds(self, amount):
+        if self.has_sufficient_funds(amount):
+            self.reserved_balance += amount
+            self.save()
+            return True
+        return False
+
+    def release_funds(self, amount):
+        if self.reserved_balance >= amount:
+            self.reserved_balance -= amount
+            self.save()
+            return True
+        return False
+
+    def transfer_funds(self, amount, to_profile):
+        """Transfer funds from reserved balance to another profile"""
+        if self.reserved_balance >= amount:
+            self.reserved_balance -= amount
+            self.save()
+            to_profile.balance += amount
+            to_profile.save()
+            return True
+        return False
 
     def __str__(self):
-        return f"Profile({self.user.username})"
+        return f"Profile({self.user.username}) - Available: ${self.available_balance()}, Reserved: ${self.reserved_balance}"
 
 class Loan(models.Model):
     
@@ -73,6 +104,7 @@ class Offer(models.Model):
     lender = models.ForeignKey(User, on_delete=models.CASCADE)
     interest_rate = models.DecimalField(max_digits=5, decimal_places=2)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    reserved_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))  # Add this line
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
