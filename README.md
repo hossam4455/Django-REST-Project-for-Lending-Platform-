@@ -1,135 +1,120 @@
-# Lenme Lending Platform - Django REST API
+# 💸 Lenme Lending Platform - Django REST API
 
-A peer-to-peer lending platform built with **Django REST Framework** that facilitates **loan applications, lender offers, funding, repayments, and automated financial tracking**.
-
----
-
-## 📑 Table of Contents
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [API Endpoints](#-api-endpoints)
-- [Installation & Setup](#-installation--setup)
-- [Configuration](#-configuration)
-- [API Flow](#-api-flow)
-- [Celery Tasks](#-celery-tasks)
-- [Financial Logic](#-financial-logic)
-- [Testing](#-testing)
-- [Database Models](#-database-models)
-- [Status Transitions](#-status-transitions)
-- [Deployment Notes](#-deployment-notes)
-- [Troubleshooting](#-troubleshooting)
-
+A **peer-to-peer lending platform** built with **Django REST Framework** that enables borrowers and lenders to seamlessly manage **loan applications, offers, funding, and repayments**.
+     DEFAULTED<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/32c4cf99-965f-4b35-b427-e0b8e0f008d4" />
 ---
 
 ## 🚀 Features
-- **Loan Management**: Create, view, and manage loan requests.
-- **Offer System**: Lenders submit offers on available loans.
-- **Fund Reservation**: Secure fund reservation during offer process.
-- **Payment Scheduling**: Automated monthly payment scheduling.
-- **Balance Management**: User profiles with available and reserved balances.
-- **Transaction Tracking**: Complete audit trail for all financial transactions.
-- **Celery Tasks**: Automated payment processing, overdue detection, and loan completion.
+
+- **Loan Management** – Create, view, and manage loan requests  
+- **Offer System** – Lenders can submit offers on available loans  
+- **Fund Reservation** – Secure reservation of lender funds during offer process  
+- **Payment Scheduling** – Automated monthly payment scheduling  
+- **Balance Management** – User profiles with available & reserved balances  
+- **Transaction Tracking** – Complete audit trail for all financial transactions  
+- **Celery Tasks** – Automated payment processing & loan status updates  
 
 ---
 
 ## 🏗️ Project Structure
-### Models
-- **Profile**: User financial profile with balance management.  
-- **Loan**: Loan requests with status tracking.  
-- **Offer**: Lender offers with fund reservation.  
-- **Payment**: Scheduled monthly payments.  
-- **Transaction**: Financial transaction records.  
+
+### **Models**
+- `Profile` – User financial profile with balance management  
+- `Loan` – Loan requests with lifecycle/status tracking  
+- `Offer` – Lender offers with reserved funds  
+- `Payment` – Scheduled monthly payments  
+- `Transaction` – Records of all financial transactions  
+
+### **Key Endpoints**
+
+#### Loan Management
+- `POST /api/loans/` – Create a loan request *(Borrower)*  
+- `GET /api/loans/available/` – List open loans for funding *(Lender)*  
+
+#### Offer System
+- `POST /api/loans/{id}/submit-offer/` – Submit loan offer *(Lender)*  
+- `POST /api/loans/{id}/accept-offer/` – Accept an offer *(Borrower)*  
+- `POST /api/loans/{id}/reject-offer/{offer_id}/` – Reject an offer *(Borrower)*  
+
+#### Funding & Payments
+- `POST /api/loans/{id}/fund/` – Fund an accepted loan *(Lender)*  
+- `POST /api/loans/{id}/payments/{payment_id}/` – Make a payment *(Borrower)*  
 
 ---
 
-## 🔄 API Endpoints
+## ⚙️ Installation & Setup
 
-### Loan Management
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/api/loans/` | Create loan request | Borrower |
-| `GET`  | `/api/loans/available/` | List loans available for funding | Lender |
+### **Prerequisites**
+- Python 3.8+  
+- Django 4.0+  
+- Django REST Framework  
+- PostgreSQL (recommended) or SQLite  
+- Redis (for Celery)  
 
-### Offer System
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/api/loans/{id}/offers/` | Submit an offer | Lender |
-| `POST` | `/api/loans/{id}/accept/` | Accept an offer | Borrower |
-| `POST` | `/api/loans/{id}/reject/{offer_id}/` | Reject an offer | Borrower |
+### **Quick Start**
 
-### Funding & Payments
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/api/loans/{id}/fund/` | Fund loan | Lender |
-| `POST` | `/api/loans/{id}/payments/{payment_id}/pay/` | Make payment | Borrower |
-
----
-
-## 🛠️ Installation & Setup
-
-### Prerequisites
-- Python 3.8+
-- Django 4.0+
-- Django REST Framework
-- PostgreSQL (recommended) or SQLite
-- Redis (for Celery)
-
-### Quick Start
 ```bash
-# Clone and setup environment
+# Clone repository
 git clone <repository-url>
 cd lending-platform
+
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate   # On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Database setup
-python manage.py migrate
-
-# Create superuser
+Create Superuser
 python manage.py createsuperuser
 
-# Start Celery worker & beat
+Run Celery Workers
 celery -A your_project worker --loglevel=info
 celery -A your_project beat --loglevel=info
 
-# Run development server
+Run Development Server
 python manage.py runserver
-1. Borrower creates loan → DRAFT → OPEN
-2. Lender submits offer → funds reserved → OFFERED
-3. Borrower accepts best offer → funds transferred → ACCEPTED
-4. Lender funds loan → schedule created → FUNDED
-5. Celery auto-processes monthly payments
-6. When all payments are complete → COMPLETED
-   If overdue → DEFAULTED
-Celery Tasks
 
-process_due_payments: Runs hourly, deducts payments automatically.
+📋 Lending Flow
+1. Borrower creates loan      → Status: DRAFT → OPEN
+2. Lender submits offer       → Funds reserved → Status: OFFERED
+3. Borrower accepts offer     → Funds transferred → Status: ACCEPTED
+4. Lender funds loan          → Payment schedule created → Status: FUNDED
+5. Automated payments (Celery) → Auto-deduct borrower balance → Transfer to lender
+6. Loan completion            → Status: COMPLETED / DEFAULTED
 
-check_overdue_payments: Runs daily, applies late fees, sends reminders.
+🤖 Celery Tasks
 
-update_loan_statuses: Runs hourly, updates loans to COMPLETED or DEFAULTED.
+process_due_payments (hourly) → Deduct due payments automatically
+
+check_overdue_payments (daily) → Apply late fees & notify users
+
+update_loan_statuses (hourly) → Auto-update loan lifecycle
+
+process_single_payment → Manual retry for failed payments
 
 💰 Financial Logic
 
-Principal: Example $5,000
+Loan Example:
 
-Lenme Fee: $3.75 (paid by lender)
+Amount: $5,000
 
-Interest: 15% APR fixed
+Interest Rate: 15% APR (fixed)
 
-Monthly Payment: Calculated via amortization formula.
+Term: 6 months
+
+Platform Fee: $3.75 (paid by lender)
+
+Monthly Payment Calculation: (Amortization Formula)
 
 def monthly_payment_amount(self):
-    r = (self.interest_rate / Decimal('100')) / Decimal('12')
+    r = (self.interest_rate / Decimal('100.0')) / Decimal('12.0')  # Monthly rate
     n = Decimal(self.term_months)
     numerator = self.amount * r * (1 + r) ** n
-    denominator = (1 + r) ** n - 1
+    denominator = ((1 + r) ** n) - 1
     return (numerator / denominator).quantize(Decimal('0.01'))
 
 🧪 Testing
+# Install test dependencies
 pip install pytest pytest-django
 
 # Run tests
@@ -139,68 +124,64 @@ pytest
 pytest --cov=lending
 
 
-Example coverage includes:
+Coverage Includes:
 
-Loan creation and validation
+Loan creation & validation
 
-Fund reservation during offers
+Offer fund reservation
 
-Balance transfers during funding
+Balance transfers & funding
 
 Payment processing
 
 Status transitions
 
-Celery task functionality
-
-📊 Database Models
-
-Profile: user, balance, reserved_balance
-
-Loan: borrower, lender, amount, term_months, interest_rate, status
-
-Offer: loan, lender, interest_rate, reserved_amount, status
-
-Payment: loan, due_date, amount, paid
-
-Transaction: from_user, to_user, amount, note
-
-🔒 Status Transitions
-DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED
-                                    ↓
-                                DEFAULTED
+Celery task execution
 
 🚀 Deployment Notes
 
-Use PostgreSQL in production.
+Use PostgreSQL in production
 
-Configure Redis for Celery broker.
+Configure Redis for Celery broker
 
-Store secrets in environment variables (DATABASE_URL, REDIS_URL, SECRET_KEY).
+Set up logging and email notifications
 
-Disable DEBUG.
+Manage secrets via environment variables
 
-Configure logging and email for notifications.
+Example Environment Variables
+
+DATABASE_URL=postgres://user:pass@host:5432/db
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=your-secret-key
+DEBUG=False
 
 🆘 Troubleshooting
 
-Celery not running → ensure worker & beat are started.
+Celery not running? Ensure both worker & beat are started
 
-Payments not processed → check logs for process_due_payments.
+DB Issues? Confirm PostgreSQL service is active
 
-Insufficient funds → borrower may not have enough balance.
-<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/8a04c07f-db5d-4b1e-a21b-8d0e0262d406" />
+Redis errors? Ensure Redis server is running
 
-Redis connection refused → check if Redis is running.
+Payments failing? Borrower may have insufficient balance
 
-✅ Optional Features Implemented
+✅ Implemented Features
 
-Hourly payment processing with Celery
+ Hourly payment processing (Celery)
 
-Automatic payment collection
+ Automatic payment collection
 
-Late fee management
+ Late fee management
 
-Loan status automation
+ Loan status automation (Completed / Defaulted)
 
-Email notifications
+ Email notifications (reminders & overdue alerts)
+
+📊 Status Lifecycle
+DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED
+                                   ↓
+                          
+
+
+
+📌 This project demonstrates end-to-end lending workflows with automated payment processing, real-time balance tracking, and fault-tolerant Celery tasks.
