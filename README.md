@@ -1,350 +1,206 @@
-Lenme — Lending Platform (Django REST)
-
-A small Django REST project implementing a peer-to-peer lending flow:
-borrower creates a loan request → lenders make offers (reserve funds) → borrower accepts an offer → lender funds the loan → scheduled monthly payments → borrower pays monthly until the loan is COMPLETED.
-
-This README documents how to configure, run, test, and use the APIs included in your codebase.
-
-Table of contents
-
-Features / Flow
-
-Models (short summary)
-
-API endpoints
-
-Environment & configuration
-
-Run locally (dev)
-
-Run tests
-
-Example usage (curl)
-
-Notes & implementation details
-
-Suggested improvements / next steps
-
-CI (GitHub Actions) example
-
-Features / Flow
-
-Borrower submits a loan request (amount, term_months, optional interest_rate).
-
-Lenders list available loans (loans without a lender and in OFFERED state) and submit offers.
-
-Offers reserve the lender’s funds (uses Profile.reserve_funds).
-
-Borrower can accept the best offer (lowest interest rate).
-
-Accepting triggers fund transfer logic (profiles updated, other offers rejected and reserved funds released).
-
-Lender can fund an accepted loan (or funding may already have moved balances during acceptance depending on your flow).
-
-Funding sets loan.status = FUNDED and creates payment schedule (monthly payments).
-
-Borrower pays scheduled payments. When all payments marked paid, loan.status should be set to COMPLETED.
-
-This repository already includes basic models, serializers, and views for these actions.
-
-Models (short summary)
-
-Profile
-
-user (OneToOne -> User)
-
-balance (Decimal)
-
-reserved_balance (Decimal)
-
-Methods: available_balance(), has_sufficient_funds(amount), reserve_funds(amount), release_funds(amount), transfer_funds(amount, to_profile)
-
-Loan
-
-borrower (FK -> User)
-
-lender (FK -> User, nullable)
-
-amount, term_months, interest_rate
-
-lenme_fee (fee paid by lender)
-
-status (DRAFT, OPEN, OFFERED, ACCEPTED, FUNDED, COMPLETED)
-
-created_at, funded_at
-
-Helper methods: total_loan_amount(), monthly_payment_amount()
-
-Offer
-
-loan (FK)
-
-lender (FK)
-
-interest_rate, reserved_amount, status (OPEN, ACCEPTED, REJECTED, EXPIRED, PENDING)
-
-created_at
-
-Payment
-
-loan (FK)
-
-due_date, amount, paid (bool), paid_at
-
-Transaction
-
-from_user, to_user, amount, note, created_at
-
-API endpoints
-
-Note: replace <BASE_URL> with your local server (e.g. http://localhost:8000)
-
-POST /api/loans/ — Create loan (authenticated borrower)
-Serializer: CreateLoanSerializer
-Required body: { "amount": "5000.00", "term_months": 6, "interest_rate": "15.00" }
-Default status: DRAFT (your view uses CreateAPIView with IsAuthenticated)
-
-GET /api/loans/available/ — Available loans for lenders (list loans with lender IS NULL and status='OFFERED')
-
-View: AvailableLoansView (ListAPIView)
-
-POST /api/loans/{loan_id}/offers/ — Submit offer (authenticated lender)
-
-Reserves lender funds (Profile.reserve_funds(total_needed)) and creates Offer with reserved_amount.
-
-Example payload in your current SubmitOfferView uses fixed rate of 15.00 and status 'PENDING'.
-
-GET /api/loans/{loan_id}/offers/ — List offers for a loan (excludes REJECTED).
-
-POST /api/loans/{loan_id}/accept/ — Accept best offer (borrower only)
-
-Accepts the best pending offer, transfers funds, sets loan ACCEPTED, rejects other offers and releases their reserved funds.
-
-POST /api/loans/{loan_id}/reject/{offer_id}/ — Reject offer (borrower only)
-
-Releases reserved funds and sets offer REJECTED. If no pending offers remain, loan returns to OPEN.
-
-POST /api/loans/{loan_id}/fund/ — Fund loan (lender only; used if not already fully transferred during accept flow)
-
-Transfers funds, sets FUNDED, creates payment schedule (Payment objects).
-
-POST /api/loans/{loan_id}/payments/{payment_id}/pay/ — Make payment (borrower only)
-
-Validates borrower balance, transfers to lender, marks Payment.paid = True, creates a Transaction.
-
-Environment & configuration
-
-Create a .env (or use environment variables):
-
-DEBUG=True
-SECRET_KEY=replace-this-with-a-secure-secret
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-DATABASE_URL=postgres://user:password@localhost:5432/lenme_db
-# or for SQLite:
-# DATABASE_URL=sqlite:///db.sqlite3
-
-
-Example settings.py snippet (using dj-database-url):
-
-import dj_database_url
-DATABASES = {
-    'default': dj_database_url.parse(os.getenv('DATABASE_URL'))
-}
-
-
-Dependencies (example):
-
-Django
-
-djangorestframework
-
-pytest
-
-pytest-django
-
-dj-database-url (optional)
-
-psycopg2-binary (if using PostgreSQL)
-
-Add to requirements.txt:
-
-Django>=4.2
-djangorestframework
-pytest
-pytest-django
-dj-database-url
-psycopg2-binary
-
-Run locally (dev)
-
-Create & activate virtualenv:
-
-python -m venv .venv
-source .venv/bin/activate
+# Lenme Lending Platform - Django REST API
+
+A peer-to-peer lending platform built with **Django REST Framework** that facilitates **loan applications, lender offers, funding, repayments, and automated financial tracking**.
+
+---
+
+## 📑 Table of Contents
+- [Features](#-features)
+- [Project Structure](#-project-structure)
+- [API Endpoints](#-api-endpoints)
+- [Installation & Setup](#-installation--setup)
+- [Configuration](#-configuration)
+- [API Flow](#-api-flow)
+- [Celery Tasks](#-celery-tasks)
+- [Financial Logic](#-financial-logic)
+- [Testing](#-testing)
+- [Database Models](#-database-models)
+- [Status Transitions](#-status-transitions)
+- [Deployment Notes](#-deployment-notes)
+- [Troubleshooting](#-troubleshooting)
+
+---
+
+## 🚀 Features
+- **Loan Management**: Create, view, and manage loan requests.
+- **Offer System**: Lenders submit offers on available loans.
+- **Fund Reservation**: Secure fund reservation during offer process.
+- **Payment Scheduling**: Automated monthly payment scheduling.
+- **Balance Management**: User profiles with available and reserved balances.
+- **Transaction Tracking**: Complete audit trail for all financial transactions.
+- **Celery Tasks**: Automated payment processing, overdue detection, and loan completion.
+
+---
+
+## 🏗️ Project Structure
+### Models
+- **Profile**: User financial profile with balance management.  
+- **Loan**: Loan requests with status tracking.  
+- **Offer**: Lender offers with fund reservation.  
+- **Payment**: Scheduled monthly payments.  
+- **Transaction**: Financial transaction records.  
+
+---
+
+## 🔄 API Endpoints
+
+### Loan Management
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/api/loans/` | Create loan request | Borrower |
+| `GET`  | `/api/loans/available/` | List loans available for funding | Lender |
+
+### Offer System
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/api/loans/{id}/offers/` | Submit an offer | Lender |
+| `POST` | `/api/loans/{id}/accept/` | Accept an offer | Borrower |
+| `POST` | `/api/loans/{id}/reject/{offer_id}/` | Reject an offer | Borrower |
+
+### Funding & Payments
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| `POST` | `/api/loans/{id}/fund/` | Fund loan | Lender |
+| `POST` | `/api/loans/{id}/payments/{payment_id}/pay/` | Make payment | Borrower |
+
+---
+
+## 🛠️ Installation & Setup
+
+### Prerequisites
+- Python 3.8+
+- Django 4.0+
+- Django REST Framework
+- PostgreSQL (recommended) or SQLite
+- Redis (for Celery)
+
+### Quick Start
+```bash
+# Clone and setup environment
+git clone <repository-url>
+cd lending-platform
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
 
-
-Configure .env (database, secret key).
-
-Run migrations:
-
+# Database setup
 python manage.py migrate
 
-
-Create superuser (optional):
-
+# Create superuser
 python manage.py createsuperuser
 
+# Start Celery worker & beat
+celery -A your_project worker --loglevel=info
+celery -A your_project beat --loglevel=info
 
-Run development server:
-
+# Run development server
 python manage.py runserver
+1. Borrower creates loan → DRAFT → OPEN
+2. Lender submits offer → funds reserved → OFFERED
+3. Borrower accepts best offer → funds transferred → ACCEPTED
+4. Lender funds loan → schedule created → FUNDED
+5. Celery auto-processes monthly payments
+6. When all payments are complete → COMPLETED
+   If overdue → DEFAULTED
+Celery Tasks
 
-Run tests
+process_due_payments: Runs hourly, deducts payments automatically.
 
-Tests use pytest and pytest-django. Example command:
+check_overdue_payments: Runs daily, applies late fees, sends reminders.
 
-pytest -q
+update_loan_statuses: Runs hourly, updates loans to COMPLETED or DEFAULTED.
 
+💰 Financial Logic
 
-If using a database URL that points to Postgres, ensure the DB exists and credentials are correct. Otherwise use the default SQLite for tests.
+Principal: Example $5,000
 
-Example test hints:
+Lenme Fee: $3.75 (paid by lender)
 
-Use fixtures to create User and Profile instances if Profile is required.
+Interest: 15% APR fixed
 
-Mark DB-using tests with @pytest.mark.django_db.
+Monthly Payment: Calculated via amortization formula.
 
-Example usage (curl)
+def monthly_payment_amount(self):
+    r = (self.interest_rate / Decimal('100')) / Decimal('12')
+    n = Decimal(self.term_months)
+    numerator = self.amount * r * (1 + r) ** n
+    denominator = (1 + r) ** n - 1
+    return (numerator / denominator).quantize(Decimal('0.01'))
 
-Create loan (borrower):
+🧪 Testing
+pip install pytest pytest-django
 
-curl -X POST http://localhost:8000/api/loans/ \
-  -H "Authorization: Token <BORROWER_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"amount":"5000.00","term_months":6,"interest_rate":"15.00"}'
+# Run tests
+pytest
 
-
-Lender submits offer (reserves funds):
-
-curl -X POST http://localhost:8000/api/loans/1/offers/ \
-  -H "Authorization: Token <LENDER_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"interest_rate":"15.00"}'
-
-
-Borrower accepts best offer:
-
-curl -X POST http://localhost:8000/api/loans/1/accept/ \
-  -H "Authorization: Token <BORROWER_TOKEN>"
-
-
-Lender funds loan (if required by flow):
-
-curl -X POST http://localhost:8000/api/loans/1/fund/ \
-  -H "Authorization: Token <LENDER_TOKEN>"
+# Run with coverage
+pytest --cov=lending
 
 
-Borrower pays monthly payment:
+Example coverage includes:
 
-curl -X POST http://localhost:8000/api/loans/1/payments/5/pay/ \
-  -H "Authorization: Token <BORROWER_TOKEN>"
+Loan creation and validation
 
-Notes & implementation details
+Fund reservation during offers
 
-Profile creation: Ensure a Profile is created for each User (via a post_save signal on User) or create it explicitly in fixtures. Many view flows expect Profile to exist.
+Balance transfers during funding
 
-Monetary math: Use decimal.Decimal throughout; avoid float arithmetic.
+Payment processing
 
-Date arithmetic: Current code creates payment schedule by adding timedelta(days=30 * n) — this is an approximation; consider using dateutil.relativedelta to add months correctly.
+Status transitions
 
-Atomicity: Key financial actions use transaction.atomic() — keep that to avoid partial updates.
+Celery task functionality
 
-Reserved funds: Offer.reserved_amount and Profile.reserved_balance are used to prevent double-funding; ensure all branches (accept/reject/timeout) release reserved funds.
+📊 Database Models
 
-Edge cases:
+Profile: user, balance, reserved_balance
 
-When accepting an offer, verify the lender still has reserved balance.
+Loan: borrower, lender, amount, term_months, interest_rate, status
 
-Consider race conditions if multiple offers accepted/funded nearly simultaneously (database-level locks or optimistic locking).
+Offer: loan, lender, interest_rate, reserved_amount, status
 
-Validation: Serializers validate amount, term_months, and interest_rate (e.g., no negative amounts, max caps).
+Payment: loan, due_date, amount, paid
 
-Status transitions: Validate permitted transitions (DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED).
+Transaction: from_user, to_user, amount, note
 
-Testing: Include tests for:
+🔒 Status Transitions
+DRAFT → OPEN → OFFERED → ACCEPTED → FUNDED → COMPLETED
+                                    ↓
+                                DEFAULTED
 
-Borrower loan request (POST /api/loans/).
+🚀 Deployment Notes
 
-Lender offer submission and reserved funds logic.
+Use PostgreSQL in production.
 
-Borrower acceptance and funds transfer.
+Configure Redis for Celery broker.
 
-Loan funding and creation of payment schedule.
+Store secrets in environment variables (DATABASE_URL, REDIS_URL, SECRET_KEY).
 
-Borrower making monthly payments and loan completion.
+Disable DEBUG.
 
-Suggested improvements / next steps
+Configure logging and email for notifications.
 
-Add OpenAPI / Swagger docs (e.g., drf-spectacular or drf-yasg) and expose /swagger/ route.
+🆘 Troubleshooting
 
-Replace timedelta(days=30*n) with relativedelta(months=+1) from dateutil.
+Celery not running → ensure worker & beat are started.
 
-Add Celery + Celery Beat for scheduled tasks (e.g., reminder emails, automatic repayment attempts).
+Payments not processed → check logs for process_due_payments.
 
-Add email/notifications for events (offer submitted, accepted, payment due).
+Insufficient funds → borrower may not have enough balance.
+<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/8a04c07f-db5d-4b1e-a21b-8d0e0262d406" />
 
-Add automated CI to run tests on push (example below).
+Redis connection refused → check if Redis is running.
 
-Add stronger concurrency control around fund reservation and transfer (select_for_update on Profile).
+✅ Optional Features Implemented
 
-CI (GitHub Actions) example
+Hourly payment processing with Celery
 
-.github/workflows/ci.yml (simple example):
+Automatic payment collection
 
-name: CI
+Late fee management
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+Loan status automation
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: lenme_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-    env:
-      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/lenme_test
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Run migrations
-        run: |
-          python manage.py migrate --noinput
-      - name: Run tests
-        run: pytest -q
-
-
-If you’d like, I can:
-
-Generate a markdown README.md file and paste it ready for your repo (I already did above — you can copy it).
-
-Add a post_save signal example to auto-create Profile for new Users.
-
-Create example pytest test(s) demonstrating the 5k/6-month flow (borrower request → lender offer → accept → fund → payments).
+Email notifications
