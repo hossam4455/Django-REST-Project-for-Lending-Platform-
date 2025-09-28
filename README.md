@@ -3,7 +3,6 @@
 A **peer-to-peer lending platform** built with **Django REST Framework** that enables borrowers and lenders to seamlessly manage **loan applications, offers, funding, and repayments**.
      DEFAULTED<img width="1190" height="621" alt="erd" src="https://github.com/user-attachments/assets/32c4cf99-965f-4b35-b427-e0b8e0f008d4" />
 ---
-
 ## 🚀 Features
 
 - **Loan Management** – Create, view, and manage loan requests  
@@ -13,7 +12,7 @@ A **peer-to-peer lending platform** built with **Django REST Framework** that en
 - **Balance Management** – User profiles with available & reserved balances  
 - **Transaction Tracking** – Complete audit trail for all financial transactions  
 - **Celery Tasks** – Automated payment processing & loan status updates  
-
+- **Testing (Pytest)** – Comprehensive test suite with coverage for loans, offers, funding, payments, and Celery tasks  
 ---
 
 ## 🏗️ Project Structure
