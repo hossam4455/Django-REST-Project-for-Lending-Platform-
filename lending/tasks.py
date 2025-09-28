@@ -65,7 +65,7 @@ def process_due_payments():
                     
                 else:
                     logger.warning(f"Insufficient balance for automatic payment {payment.id}")
-                    # Send reminder to borrower
+               
                     send_payment_reminder(payment.loan.borrower.email, payment, due=True)
                     
         except Exception as e:
@@ -83,12 +83,12 @@ def process_due_payments():
 def check_overdue_payments():
     """
     Check for overdue payments and send notifications.
-    Also apply late fees if configured.
+
     """
     logger.info("Checking for overdue payments...")
     
     today = timezone.now().date()
-    overdue_days = 7  # Consider payments overdue after 7 days
+    overdue_days = 7  
     
     overdue_date = today - timedelta(days=overdue_days)
     overdue_payments = Payment.objects.filter(
@@ -103,10 +103,10 @@ def check_overdue_payments():
     for payment in overdue_payments:
         overdue_count += 1
         
-        # Calculate late fee (5% of payment amount or $10, whichever is higher)
+     
         late_fee = max(payment.amount * Decimal('0.05'), Decimal('10.00'))
         
-        # Check if late fee already applied
+       
         if not hasattr(payment, 'late_fee_applied') or not payment.late_fee_applied:
             payment.late_fee = late_fee
             payment.late_fee_applied = True
@@ -114,7 +114,7 @@ def check_overdue_payments():
             
             logger.info(f"Applied late fee of {late_fee} to payment {payment.id}")
         
-        # Send overdue notification
+       
         try:
             send_overdue_notification(
                 payment.loan.borrower.email,
@@ -155,14 +155,12 @@ def update_loan_statuses():
             completed_count += 1
             logger.info(f"Loan {loan.id} marked as COMPLETED")
         elif paid_payments > 0:
-            # Some payments made, but not all
-            # You could add a 'PARTIALLY_PAID' status if needed
+  
             pass
         
         updated_count += 1
     
-    # Also check for loans that should be marked as DEFAULTED
-    # (e.g., too many overdue payments)
+
     defaulted_loans = check_and_mark_defaulted_loans()
     
     logger.info(f"Loan status update completed. Updated: {updated_count}, Completed: {completed_count}, Defaulted: {len(defaulted_loans)}")
@@ -219,7 +217,7 @@ def process_single_payment(payment_id):
 def check_and_mark_defaulted_loans():
     """
     Check for loans that should be marked as defaulted
-    (e.g., 30+ days overdue on multiple payments)
+ 30+ days overdue on multiple payments
     """
     today = timezone.now().date()
     default_threshold = 30  # days
@@ -233,14 +231,14 @@ def check_and_mark_defaulted_loans():
     defaulted_loans = []
     
     for loan in default_candidates:
-        # Check if multiple payments are severely overdue
+  
         severely_overdue = Payment.objects.filter(
             loan=loan,
             due_date__lte=today - timedelta(days=default_threshold),
             paid=False
         ).count()
         
-        if severely_overdue >= 2:  # At least 2 payments severely overdue
+        if severely_overdue >= 2: 
             loan.status = 'DEFAULTED'
             loan.save()
             defaulted_loans.append(loan)
