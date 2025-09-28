@@ -35,9 +35,9 @@ def send_payment_reminder(user_email, payment, due=False, automatic=False):
             Please add funds to your account to avoid late fees.
             '''
         
-        # In production, you would actually send the email
+        #this thing not need on task but iadd ed it for future use
         logger.info(f"Would send email to {user_email}: {subject}")
-        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user_email])
+  
         
     except Exception as e:
         logger.error(f"Error sending payment reminder: {str(e)}")

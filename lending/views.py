@@ -18,7 +18,7 @@ class LoanCreateView(generics.CreateAPIView):
         serializer.save(borrower=self.request.user)
 
 # In lending/views.py - Temporary fix for SubmitOfferView
-# In lending/views.py - Update SubmitOfferView to reserve funds
+
 class SubmitOfferView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -31,10 +31,10 @@ class SubmitOfferView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Calculate total amount needed (loan amount + Lenme fee)
+
         total_needed = loan.amount + loan.lenme_fee
         
-        # Get lender's profile
+
         try:
             lender_profile = Profile.objects.get(user=request.user)
         except Profile.DoesNotExist:
@@ -43,14 +43,14 @@ class SubmitOfferView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Check if lender has sufficient available funds
+ 
         if not lender_profile.has_sufficient_funds(total_needed):
             return Response(
                 {'detail': f'Insufficient funds. Available: ${lender_profile.available_balance()}, Needed: ${total_needed}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Check if lender already has an active offer for this loan
+
         existing_offer = Offer.objects.filter(
             loan=loan, 
             lender=request.user, 
@@ -63,28 +63,28 @@ class SubmitOfferView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Use atomic transaction for data consistency
+        
         try:
             with transaction.atomic():
-                # Reserve the funds
+              
                 if not lender_profile.reserve_funds(total_needed):
                     return Response(
                         {'detail': 'Failed to reserve funds'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Create the offer with reserved amount
+               
                 offer = Offer.objects.create(
                     loan=loan,
                     lender=request.user,
-                    interest_rate=Decimal('15.00'),  # Fixed 15% rate
+                    interest_rate=Decimal('15.00'),  
                     reserved_amount=total_needed,
                     status='PENDING'
                 )
                 
-                # Update loan status to OFFERED
+           
                 loan.status = 'OFFERED'
-                loan.interest_rate = Decimal('15.00')  # Always set to 15%
+                loan.interest_rate = Decimal('15.00')
                 loan.save()
                 
                 return Response({
@@ -149,23 +149,22 @@ class AcceptOfferView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Transfer funds directly (bypassing reserved balance for now)
+                # Transfer funds directly 
                 lender_profile.balance -= total_needed
                 lender_profile.save()
                 
-                borrower_profile.balance += loan.amount  # Borrower gets loan amount only (not the fee)
-                borrower_profile.save()
+                borrower_profile.balance += loan.amount  
                 
-                # Update offer status
+            
                 offer.status = 'ACCEPTED'
                 offer.save()
                 
-                # Update loan status and lender
+               
                 loan.status = 'ACCEPTED'
                 loan.lender = offer.lender
                 loan.save()
                 
-                # Reject all other pending offers
+               
                 other_offers = Offer.objects.filter(
                     loan=loan, 
                     status='PENDING'

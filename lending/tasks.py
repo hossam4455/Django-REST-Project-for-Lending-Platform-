@@ -10,7 +10,7 @@ from .models import Loan, Payment, Profile, Transaction
 from .utils import send_payment_reminder, send_overdue_notification
 
 logger = logging.getLogger(__name__)
-
+#this all  tasks not need on task but i added it for future use
 @shared_task
 def process_due_payments():
     """
